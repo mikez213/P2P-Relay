@@ -11,9 +11,9 @@ services:
       - SERVICE=boot
     network_mode: host  # Use host network
     command: [
-      "./boot",
-      "-port=1237",
-      "-key=0"
+      # "./boot",
+      "1237",
+      "0",
     ]
 
   bootstrap2:
@@ -28,10 +28,10 @@ services:
       - SERVICE=boot
     network_mode: host  # Use host network
     command: [
-      "./boot",
-      "-port=1238",
-      "-key=1",
-      "-bootstrap=/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n"
+      # "./boot",
+      "1238",
+      "1",
+      "/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n"
     ]
     depends_on:
       - bootstrap1
@@ -48,10 +48,11 @@ services:
       - SERVICE=boot
     network_mode: host  # Use host network
     command: [
-      "./boot",
-      "-port=1239",
-      "-key=2",
-      "-bootstrap=/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n,/ip4/192.168.65.3/tcp/1238/p2p/12D3KooWBnext3VBZZuBwGn3YahAZjf49oqYckfx64VpzH6dyU1p"
+      # "./boot",
+      "1239",
+      "2",
+      "/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n",
+      "/ip4/192.168.65.3/tcp/1238/p2p/12D3KooWBnext3VBZZuBwGn3YahAZjf49oqYckfx64VpzH6dyU1p",
     ]
     depends_on:
       - bootstrap1
