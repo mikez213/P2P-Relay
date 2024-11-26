@@ -21,6 +21,7 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 	libp2p "github.com/libp2p/go-libp2p"
 
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 
@@ -127,16 +128,22 @@ func createHost(ctx context.Context, relayOpt libp2p.Option, listenPort int) hos
 		return cfg.Apply(libp2p.ListenAddrs(listenAddrs...))
 	}
 
+	rcmgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(rcmgr.InfiniteLimits))
+	if err != nil {
+		log.Fatalf("could not create new resource manager: %w", err)
+	}
+
 	host, err := libp2p.New(
 		relayOpt,
 		ListenAddrs,
 		libp2p.EnableRelay(),
-		libp2p.EnableRelayService(),
+		libp2p.EnableRelayService(relay.WithInfiniteLimits()), // do a config with limited istead?
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
 		libp2p.EnableAutoNATv2(),
 		libp2p.EnableHolePunching(),
 		libp2p.ForceReachabilityPublic(),
+		libp2p.ResourceManager(rcmgr),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -144,7 +151,7 @@ func createHost(ctx context.Context, relayOpt libp2p.Option, listenPort int) hos
 	return host
 }
 
-func setupRelayService(host host.Host) *relay.Relay {
+func setupRelayService(host host.Host) (*relay.Relay, relay.MetricsTracer) {
 	mt := relay.NewMetricsTracer()
 	log.Debugf("Relay timeouts: %d %d %d",
 		relay.ConnectTimeout,
@@ -159,9 +166,9 @@ func setupRelayService(host host.Host) *relay.Relay {
 	// var status pb.Status
 	if err != nil {
 		log.Fatalf("Failed to instantiate the relay: %v", err)
-		return nil
+		return nil, nil
 	}
-	return relayService
+	return relayService, mt
 }
 
 func logHostInfo(host host.Host) {
@@ -301,9 +308,9 @@ func main() {
 
 	host := createHost(ctx, nodeOpt, listenPort)
 
-	relayService := setupRelayService(host)
+	relayService, metrics := setupRelayService(host)
 
-	log.Info(relayService)
+	log.Info(relayService, metrics)
 	logHostInfo(host)
 
 	kademliaDHT := createDHT(ctx, host)
