@@ -84,7 +84,7 @@ func RelayIdentity(keyIndex int) (libp2p.Option, error) {
 func initializeLogger() {
 
 	// logging.SetAllLoggers(logging.LevelWarn)
-	logging.SetAllLoggers(logging.LevelDebug)
+	logging.SetAllLoggers(logging.LevelInfo)
 
 	// logging.SetLogLevel("dht", "error") // get rid of  network size estimator track peers: expected bucket size number of peers
 
@@ -230,7 +230,7 @@ func connectToBootstrapPeers(ctx context.Context, host host.Host, bootstrapPeers
 func setupDHTRefresh(kademliaDHT *dht.IpfsDHT) {
 	go func() {
 		for {
-			time.Sleep(30 * time.Second)
+			time.Sleep(60 * time.Second)
 			kademliaDHT.RefreshRoutingTable()
 			peers := kademliaDHT.RoutingTable().ListPeers()
 			log.Infof("Routing table peers (%d): %v", len(peers), peers)

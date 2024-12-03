@@ -19,6 +19,7 @@ import (
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 
+	"github.com/libp2p/go-libp2p/p2p/host/autonat"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 
 	// "github.com/libp2p/go-libp2p/p2p/protocol/ping"
@@ -39,32 +40,6 @@ import (
 var log = logging.Logger("mobile_client_log")
 var rend = "/customprotocol/1.0.0"
 
-// var RelayerPrivateKeys = []string{
-// 	//boots
-// 	"CAESQAA7xVQKsQ5VAC5ge+XsixR7YnDkzuHa4nrY8xWXGK3fo9yN1Eaiat9Vn1iwaVQDqTjywVP303ojVLxXcQ9ze4E=",
-// 	// pid: 12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n
-// 	"CAESQMCYbjRpXBDUnIpDyqY+mA3n7z9gF3CaggWTknd90LauHUcz8ldNtlUchFATmMSE1r/NMnSpEBbLvzWQKq3N45s=",
-// 	// pid: 12D3KooWBnext3VBZZuBwGn3YahAZjf49oqYckfx64VpzH6dyU1p
-// 	"CAESQB1Y1Li0Wd4KcvMvbv5/+CTG79axzl3R8yTuzWOckMgmNAzZqxim5E/7e9mgd87FTMPQNHqiItqTFwHJeMxr0H8=",
-// 	// pid: 12D3KooWDKYjXDDgSGzhEYWYtDvfP9pMtGNY1vnAwRsSp2CwCWHL
-
-// 	//relays
-// 	"CAESQHMEeM3iNIIxNThxIfnuO5FJ0oUQJy8V7TFD80lGziBE7SuPw2wckCrFRihVDaw0e6PkDCwsh/6u3UgBxB3OTFo=",
-// 	//12D3KooWRnBKUEkAEpsoCoEiuhxKBJ5j2Bdop6PGxFMvd4PwoevM
-// 	"CAESQP3Pu7TVp2RSVIZykj65/MDXm/eiTOfLGH3xCWQVmUoC67MkFWUEOd6QERl1Y4Xvi1Rt+d36UuaFXanT+hVUDAY=",
-// 	//12D3KooWRgSQnguL2DYkXUXqCLiRQ35PEX4eEH3havy2X18AVALd
-// 	"CAESQDE2IToG5mWwzWEeXt3/OVbx9XyE743DTenPFUG8M06IQXSarkNhuxNEJisnWeuDvaoaM/fNJNMqhPR81NL3Pio=",
-// 	//12D3KooWEDso33ti9KsKmD2g2egNmw6BXgch7V5vFz1TziuNYybo
-
-// 	//nodes
-// 	"CAESQFffsVM3eUXLozmXkBM2FSSVhEmo/Cq5RlXOAAaniTdCu3EQ6Zf7lQDasCj6IXyTihFQWZB+nmGFn/ZAA5y5egk=",
-// 	//12D3KooWNS4QQxwNURwoYoXmGjH9AQkagcGTjRUQT33P4i4FKQsi
-// 	"CAESQCSHrfyzNZkxwoNmXI1wx5Lvr6o4+kGxGepFH0AfYlKthyON+1hQRjLJQaBAQLrr1cfMHFFoC40X62DQIhL246U=",
-// 	//12D3KooWJuteouY1d5SYFcAUAYDVPjFD8MUBgqsdjZfBkAecCS2Y
-// 	"CAESQDyiSqC9Jez8wKSQs74YJalAegamjVKHbnaN35pfe6Gk21WVgCzfvBdLVoRj8XXny/k1LtSOhPZWNz0rWKCOYpk=",
-// 	//12D3KooWQaZ9Ppi8A2hcEspJhewfPqKjtXu4vx7FQPaUGnHXWpNL
-// }
-
 func init() {
 	bootstrapIDStrs := []string{
 		"12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n",
@@ -80,10 +55,10 @@ func init() {
 		cmn.BootstrapPeerIDs = append(cmn.BootstrapPeerIDs, pid)
 	}
 
-	// logging.SetAllLoggers(logging.LevelWarn)
-	logging.SetAllLoggers(logging.LevelDebug)
+	logging.SetAllLoggers(logging.LevelInfo)
+	// logging.SetAllLoggers(logging.LevelDebug)
 
-	// logging.SetLogLevel("dht", "error") // get rid of  network size estimator track peers: expected bucket size number of peers
+	logging.SetLogLevel("dht", "error") // get rid of  network size estimator track peers: expected bucket size number of peers
 	logging.SetLogLevel("mobile_client_log", "debug")
 }
 
@@ -474,10 +449,10 @@ func main() {
 	// rend := "/ipfs/id/1.0.0"
 	identify.ActivationThresh = 1
 	// rend := identify.ID
-	host.SetStreamHandler(protocol.ID(rend), handleStream)
 	// rend := "/ipfs/ping/1.0.0"
 	// rend := ping.ID
 
+	time.Sleep(1 * time.Second)
 	cmn.ConnectToBootstrapPeers(ctx, host, bootstrapPeers)
 	cmn.BootstrapDHT(ctx, kademliaDHT)
 	cmn.ConnectToRelay(ctx, host, relayInfo)
@@ -506,6 +481,13 @@ func main() {
 
 	connectToPeers(ctx, host, relayAddresses, peerChan, connectedPeers, rend)
 
+	nat, err := autonat.New(host)
+	// nat2, err := autonatv2.New(host)
+	// if err != nil {
+	// 	log.Error("problem with autonat", err)
+	// }
+	// nat.Status()
+	// nat2.GetReachability(ctx, []autonatv2.Request{})
 	projectID := "project_test_1234"
 	devID := "dev_1234"
 	apiKey := "api_1234"
@@ -513,7 +495,7 @@ func main() {
 	hostID := "host_1234"
 	configOptions := map[string]string{"val1": "key1", "val2": "key2"}
 
-	ticker := time.NewTicker(7 * time.Second)
+	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
 	go func() {
@@ -527,6 +509,7 @@ func main() {
 			}
 
 			log.Infof("current hostGetAddrInfo: %+v", hostGetAddrInfo(&host))
+			log.Info("current_nat_status is ", nat.Status())
 
 			for _, peerID := range peers {
 				if peerID == host.ID() || cmn.IsInvalidTarget(relayAddresses, peerID) {
@@ -543,7 +526,7 @@ func main() {
 				pingprotocol.Status(peerID, projectID, devID, apiKey)
 				pingprotocol.Info(peerID, hostID)
 				pingprotocol.StartStream(peerID, projectID, devID, apiKey, issueNeed, configOptions)
-				time.Sleep(1 * time.Second)
+				time.Sleep(5 * time.Second)
 				pingprotocol.Status(peerID, projectID, devID, apiKey)
 				pingprotocol.StopStream(peerID, projectID, devID, apiKey)
 
