@@ -296,14 +296,17 @@ func main() {
 	identify.ActivationThresh = 1
 
 	cmn.ParseCmdArgs()
-	relayAddrStr, keyIndexInt, bootstrapAddrs := cmn.ParseCmdArgs()
+	relayAddrStr, keyIndexInt, bootstrapAddrs, err := cmn.ParseCmdArgs()
 	log.Infof("%v, %v, %v ", relayAddrStr, keyIndexInt, bootstrapAddrs)
 	listenPort := 1240
 	// listenPort, bootstrapPeers, keyIndex, noderunnerIDStr := parseCommandLineArgs()
 	log.Infof("%v %v %v %v", listenPort, bootstrapAddrs, keyIndexInt)
 
-	nodeOpt := cmn.GetLibp2pIdentity(keyIndexInt)
+	nodeOpt, err := cmn.GetLibp2pIdentity(keyIndexInt)
 
+	if err != nil {
+		log.Errorf("error in startup %v", err)
+	}
 	ctx := context.Background()
 
 	host := createHost(ctx, nodeOpt, listenPort)
@@ -317,7 +320,7 @@ func main() {
 
 	bootstrapDHT(ctx, kademliaDHT)
 
-	bootstrapPeers := cmn.ParseBootstrap(bootstrapAddrs)
+	bootstrapPeers, err := cmn.ParseBootstrap(bootstrapAddrs)
 	if len(bootstrapPeers) == 0 {
 		log.Fatal("no valid bootstrap addrs")
 	}

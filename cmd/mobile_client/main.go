@@ -288,26 +288,21 @@ func connectToPeers(ctx context.Context, host host.Host, relayAddresses []peer.A
 					log.Errorf("Connection failed via relay: %v", err)
 					continue
 				}
-				// if err := host.Connect(ctx, relayAddrInfo); err != nil {
-				// 	log.Warningf("failed to connect to peer %s via relay %s: %v", p.ID, relayAddrInfo.ID, err)
-				// 	continue
-				// }
 
 				// add a timeout?
 				log.Infof("we have connected to peer %s via relay %s", p.ID, relayAddrInfo.ID)
 
 				log.Infof("peerswithaddrs: %v", host.Peerstore().PeersWithAddrs())
-
-				// old streaming method
-
-				// manualStream(ctx, host, p, relayAddrInfo)
-
+				/*
+					// old streaming method - use to test sending a small string
+					manualStream(ctx, host, p, relayAddrInfo)
+				*/
 				// var node_runner_ID peer.ID = "12D3KooWJuteouY1d5SYFcAUAYDVPjFD8MUBgqsdjZfBkAecCS2Y"
 				// log.Infof("peers info of node runner: %v", host.Peerstore().SupportsProtocols(node_runner_ID, protocol.ID(rend)))
 
 				/*
-					OBVIOUSLY WE DONT HAVE A READ HERE SO WE WON"T SEE ANY RESPONSE HERE
-					USE pingPeer to get messages back :P :clown:
+					WE DONT HAVE A READ HERE SO WE WON"T SEE ANY RESPONSE HERE
+					USE pingPeer to get messages back
 				*/
 				log.Infof("skipping TEST stream")
 				log.Infof("adding %+v to connectedPeers ID %s", targetRelayedInfo, p.ID)
@@ -408,14 +403,14 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	relayAddrStr, keyIndexInt, bootstrapAddrs := cmn.ParseCmdArgs()
+	relayAddrStr, keyIndexInt, bootstrapAddrs, err := cmn.ParseCmdArgs()
 	log.Infof("%v %v %v	", relayAddrStr, bootstrapAddrs, keyIndexInt)
 
-	nodeOpt := cmn.GetLibp2pIdentity(keyIndexInt)
+	nodeOpt, err := cmn.GetLibp2pIdentity(keyIndexInt)
 
-	relayInfo := cmn.ParseRelayAddress(relayAddrStr)
+	relayInfo, err := cmn.ParseRelayAddress(relayAddrStr)
 
-	bootstrapPeers := cmn.ParseBootstrap(bootstrapAddrs)
+	bootstrapPeers, err := cmn.ParseBootstrap(bootstrapAddrs)
 	if len(bootstrapPeers) == 0 {
 		log.Fatal("no valid bootstrap addrs")
 	}
@@ -456,7 +451,7 @@ func main() {
 	cmn.ConnectToBootstrapPeers(ctx, host, bootstrapPeers)
 	cmn.BootstrapDHT(ctx, kademliaDHT)
 	cmn.ConnectToRelay(ctx, host, relayInfo)
-	relayAddresses := cmn.ConstructRelayAddresses(host, relayInfo)
+	relayAddresses, err := cmn.ConstructRelayAddresses(host, relayInfo)
 
 	host.SetStreamHandler(protocol.ID(rend), handleStream)
 

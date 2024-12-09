@@ -6,11 +6,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 
 	logging "github.com/ipfs/go-log/v2"
-	libp2p "github.com/libp2p/go-libp2p"
 
+	// create "mnwarm/internal/host"
 	cmn "mnwarm/internal/shared"
 )
 
@@ -20,8 +21,8 @@ func main() {
 	logging.SetAllLoggers(logging.LevelError)
 	logging.SetLogLevel("bootlog", "debug")
 
-	portStr, keyIndexInt, bootstrapAddrs := cmn.ParseCmdArgs()
-	nodeOpt := cmn.GetLibp2pIdentity(keyIndexInt)
+	portStr, keyIndexInt, bootstrapAddrs, err := cmn.ParseCmdArgs()
+	nodeOpt, err := cmn.GetLibp2pIdentity(keyIndexInt)
 
 	listenPort, err := strconv.Atoi(portStr)
 	if err != nil {
@@ -29,6 +30,9 @@ func main() {
 	}
 
 	ctx := context.Background()
+	// nodeType := create.Bootstrap
+	//XLF2ipQ4jD3U
+	// host, _, err := create.CreateHost(ctx, nodeType, nil, listenPort)
 	host, err := libp2p.New(
 		nodeOpt,
 		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", listenPort)),
@@ -54,7 +58,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	bootstrapPeers := cmn.ParseBootstrap(bootstrapAddrs)
+	bootstrapPeers, err := cmn.ParseBootstrap(bootstrapAddrs)
 	if len(bootstrapPeers) == 0 {
 		log.Warn("no valid bootstrap addrs")
 	}

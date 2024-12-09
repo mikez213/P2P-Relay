@@ -236,14 +236,18 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	relayAddrStr, keyIndexInt, bootstrapAddrs := cmn.ParseCmdArgs()
+	relayAddrStr, keyIndexInt, bootstrapAddrs, err := cmn.ParseCmdArgs()
 	log.Infof("%v %v %v", relayAddrStr, bootstrapAddrs, keyIndexInt)
 
-	nodeOpt := cmn.GetLibp2pIdentity(keyIndexInt)
+	nodeOpt, err := cmn.GetLibp2pIdentity(keyIndexInt)
 
-	relayInfo := cmn.ParseRelayAddress(relayAddrStr)
+	relayInfo, err := cmn.ParseRelayAddress(relayAddrStr)
 
-	bootstrapPeers := cmn.ParseBootstrap(bootstrapAddrs)
+	bootstrapPeers, err := cmn.ParseBootstrap(bootstrapAddrs)
+
+	if err != nil {
+		log.Error("error in startup %v", err)
+	}
 	if len(bootstrapPeers) == 0 {
 		log.Fatal("no valid bootstrap addrs")
 	}
@@ -268,7 +272,7 @@ func main() {
 	cmn.ConnectToBootstrapPeers(ctx, host, bootstrapPeers)
 	cmn.BootstrapDHT(ctx, kademliaDHT)
 	cmn.ConnectToRelay(ctx, host, relayInfo)
-	relayAddresses := cmn.ConstructRelayAddresses(host, relayInfo)
+	relayAddresses, err := cmn.ConstructRelayAddresses(host, relayInfo)
 
 	log.Infof("waiting 10 sec for stability")
 	time.Sleep(5 * time.Second)

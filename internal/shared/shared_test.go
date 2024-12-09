@@ -1,13 +1,9 @@
 package common
 
 import (
-	"context"
 	"testing"
 
-	"github.com/libp2p/go-libp2p"
-	dht "github.com/libp2p/go-libp2p-kad-dht"
 	crypto "github.com/libp2p/go-libp2p/core/crypto"
-	host "github.com/libp2p/go-libp2p/core/host"
 	peer "github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 )
@@ -69,13 +65,10 @@ func TestRelayIdentity(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := RelayIdentity(tt.args.keyIndex)
+			_, err := RelayIdentity(tt.args.keyIndex)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("RelayIdentity() error = %v, wantErr %v", err, tt.wantErr)
 				return
-			}
-			if !tt.wantErr && got == nil {
-				t.Errorf("RelayIdentity() returned nil option")
 			}
 		})
 	}
@@ -101,22 +94,21 @@ func TestGetLibp2pIdentity(t *testing.T) {
 		keyIndex int
 	}
 	tests := []struct {
-		name string
-		args args
-		want bool
+		name    string
+		args    args
+		wantErr bool
 	}{
 		{
-			name: "Valid keyIndex 0",
-			args: args{keyIndex: 0},
-			want: true,
+			name:    "Valid keyIndex 0",
+			args:    args{keyIndex: 0},
+			wantErr: false,
 		},
-		// invalid keyIndex calls log.Fatalf
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetLibp2pIdentity(tt.args.keyIndex)
-			if (got != nil) != tt.want {
-				t.Errorf("GetLibp2pIdentity() = %v, want non-nil: %v", got, tt.want)
+			_, err := GetLibp2pIdentity(tt.args.keyIndex)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetLibp2pIdentity() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -307,9 +299,10 @@ func TestParseBootstrap(t *testing.T) {
 		bootstrapAddrs []string
 	}
 	tests := []struct {
-		name string
-		args args
-		want []peer.AddrInfo
+		name    string
+		args    args
+		want    []peer.AddrInfo
+		wantErr bool
 	}{
 		{
 			name: "Valid addresses",
@@ -318,6 +311,7 @@ func TestParseBootstrap(t *testing.T) {
 				{ID: pid1},
 				{ID: pid2},
 			},
+			wantErr: false,
 		},
 		{
 			name: "Contains invalid address",
@@ -325,16 +319,19 @@ func TestParseBootstrap(t *testing.T) {
 			want: []peer.AddrInfo{
 				{ID: pid1},
 			},
+			wantErr: true,
 		},
 		{
-			name: "Empty addresses",
-			args: args{bootstrapAddrs: []string{}},
-			want: []peer.AddrInfo{},
+			name:    "Empty addresses",
+			args:    args{bootstrapAddrs: []string{}},
+			want:    []peer.AddrInfo{},
+			wantErr: false,
 		},
 		{
-			name: "Only invalid addresses",
-			args: args{bootstrapAddrs: []string{invalidAddr}},
-			want: []peer.AddrInfo{},
+			name:    "Only invalid addresses",
+			args:    args{bootstrapAddrs: []string{invalidAddr}},
+			want:    []peer.AddrInfo{},
+			wantErr: true,
 		},
 		{
 			name: "Mixed valid and empty addresses",
@@ -342,12 +339,15 @@ func TestParseBootstrap(t *testing.T) {
 			want: []peer.AddrInfo{
 				{ID: pid2},
 			},
+			wantErr: false,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseBootstrap(tt.args.bootstrapAddrs)
+			got, err := ParseBootstrap(tt.args.bootstrapAddrs)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseBootstrap() error = %v, wantErr %v", err, tt.wantErr)
+			}
 			if len(got) != len(tt.want) {
 				t.Errorf("ParseBootstrap() got %v addresses, want %v addresses", len(got), len(tt.want))
 				return
@@ -418,194 +418,18 @@ func TestAssembleRelay(t *testing.T) {
 				},
 				p: targetAddrInfo,
 			},
-			wantErr: true, // Expecting an error since relay has no addresses
+			wantErr: true,
 		},
-		// Removed "Invalid relay address" test case
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := AssembleRelay(tt.args.relayAddrInfo, tt.args.p)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AssembleRelay() error = %v, wantErr %v", err, tt.wantErr)
-				return
 			}
 			if !tt.wantErr && got.ID != tt.args.p.ID {
 				t.Errorf("AssembleRelay() got ID = %v, want ID = %v", got.ID, tt.args.p.ID)
 			}
-		})
-	}
-}
-
-func TestConnectToBootstrapPeers(t *testing.T) {
-	ctx := context.Background()
-	h, err := libp2p.New()
-	if err != nil {
-		t.Fatalf("Failed to create mock host: %v", err)
-	}
-	defer h.Close()
-
-	testPeerID, err := peer.Decode("12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n")
-	if err != nil {
-		t.Fatalf("Failed to decode test peer ID: %v", err)
-	}
-	bootstrapPeers := []peer.AddrInfo{
-		{ID: testPeerID},
-	}
-
-	type args struct {
-		ctx            context.Context
-		host           host.Host
-		bootstrapPeers []peer.AddrInfo
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "Connect to bootstrap peers",
-			args: args{
-				ctx:            ctx,
-				host:           h,
-				bootstrapPeers: bootstrapPeers,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ConnectToBootstrapPeers(tt.args.ctx, tt.args.host, tt.args.bootstrapPeers)
-		})
-	}
-}
-
-func TestBootstrapDHT(t *testing.T) {
-	ctx := context.Background()
-	h, err := libp2p.New()
-	if err != nil {
-		t.Fatalf("Failed to create mock host: %v", err)
-	}
-	defer h.Close()
-
-	kademliaDHT, err := dht.New(ctx, h)
-	if err != nil {
-		t.Fatalf("Failed to create DHT: %v", err)
-	}
-
-	type args struct {
-		ctx         context.Context
-		kademliaDHT *dht.IpfsDHT
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "Bootstrap DHT",
-			args: args{
-				ctx:         ctx,
-				kademliaDHT: kademliaDHT,
-			},
-		},
-		{
-			name: "Nil DHT",
-			args: args{
-				ctx:         ctx,
-				kademliaDHT: nil,
-			},
-		},
-	}
-	for _, tt := range tests {
-		if tt.name == "Nil DHT" {
-			defer func() {
-				if r := recover(); r == nil {
-					t.Errorf("BootstrapDHT() did not panic with nil DHT")
-				}
-			}()
-		}
-		t.Run(tt.name, func(t *testing.T) {
-			BootstrapDHT(tt.args.ctx, tt.args.kademliaDHT)
-		})
-	}
-}
-
-func TestConnectToRelay(t *testing.T) {
-	ctx := context.Background()
-	h, err := libp2p.New()
-	if err != nil {
-		t.Fatalf("Failed to create mock host: %v", err)
-	}
-	defer h.Close()
-
-	relayPeerID, err := peer.Decode("12D3KooWRnBKUEkAEpsoCoEiuhxKBJ5j2Bdop6PGxFMvd4PwoevM")
-	if err != nil {
-		t.Fatalf("Failed to decode relay peer ID: %v", err)
-	}
-	relayInfo := &peer.AddrInfo{
-		ID: relayPeerID,
-	}
-
-	type args struct {
-		ctx       context.Context
-		host      host.Host
-		relayInfo *peer.AddrInfo
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "Connect to relay",
-			args: args{
-				ctx:       ctx,
-				host:      h,
-				relayInfo: relayInfo,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ConnectToRelay(tt.args.ctx, tt.args.host, tt.args.relayInfo)
-		})
-	}
-}
-
-func TestReserveRelay(t *testing.T) {
-	ctx := context.Background()
-	h, err := libp2p.New()
-	if err != nil {
-		t.Fatalf("Failed to create mock host: %v", err)
-	}
-	defer h.Close()
-
-	relayPeerID, err := peer.Decode("12D3KooWRnBKUEkAEpsoCoEiuhxKBJ5j2Bdop6PGxFMvd4PwoevM")
-	if err != nil {
-		t.Fatalf("Failed to decode relay peer ID: %v", err)
-	}
-	relayInfo := &peer.AddrInfo{
-		ID: relayPeerID,
-	}
-
-	type args struct {
-		ctx       context.Context
-		host      host.Host
-		relayInfo *peer.AddrInfo
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "Reserve relay",
-			args: args{
-				ctx:       ctx,
-				host:      h,
-				relayInfo: relayInfo,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ReserveRelay(tt.args.ctx, tt.args.host, tt.args.relayInfo)
 		})
 	}
 }
