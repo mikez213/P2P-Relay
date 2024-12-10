@@ -55,7 +55,7 @@ func TestBootstrapPeers(t *testing.T) {
 		name string
 	}{
 		{
-			name: "Connect to single relay peer",
+			name: "Connect to single bootstrap peer",
 		},
 	}
 
@@ -86,6 +86,45 @@ func TestBootstrapPeers(t *testing.T) {
 			success, errs := cmn.ConnectToBootstrapPeers(ctx, testHost, bootstrap)
 			if !success {
 				t.Errorf("Expected successful connection, got errors: %v", errs)
+			}
+		})
+	}
+}
+
+func TestConnectToRelay(t *testing.T) {
+	tests := []struct {
+		name string
+	}{
+		{
+			name: "Connect to single relay peer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			relay, err := StartRelay(ctx)
+			if err != nil {
+				t.Fatalf("StartRelay failed: %v", err)
+			}
+			defer relay.Host.Close()
+
+			if len(relay.Host.Addrs()) == 0 {
+				t.Fatalf("Relay has no addresses")
+			}
+
+			testHost, err := libp2p.New(
+				libp2p.NoListenAddrs,
+			)
+			if err != nil {
+				t.Fatalf("Create test host failed: %v", err)
+			}
+			defer testHost.Close()
+
+			err = cmn.ConnectToRelay(ctx, testHost, relay.AddrInfo())
+			if err != nil {
+				t.Errorf("Expected successful connection, got errors: %v", err)
 			}
 		})
 	}
