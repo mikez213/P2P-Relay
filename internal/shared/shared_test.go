@@ -1,6 +1,7 @@
 package common
 
 import (
+	"strings"
 	"testing"
 
 	crypto "github.com/libp2p/go-libp2p/core/crypto"
@@ -356,6 +357,64 @@ func TestParseBootstrap(t *testing.T) {
 				if got[i].ID != tt.want[i].ID {
 					t.Errorf("ParseBootstrap() got ID %v, want ID %v", got[i].ID, tt.want[i].ID)
 				}
+			}
+		})
+	}
+}
+
+func TestParseRelayAddress(t *testing.T) {
+	validAddr := "/ip4/127.0.0.1/tcp/1234/p2p/QmRelayID"
+	invalidAddr := "/invalid/multiaddr"
+
+	validPeerID, err := peer.Decode("QmRelayID")
+	if err != nil {
+		t.Fatalf("Failed to decode valid peer ID: %v", err)
+	}
+
+	type args struct {
+		relayAddrStr string
+	}
+	tests := []struct {
+		name      string
+		args      args
+		want      *peer.AddrInfo
+		wantErr   bool
+		errorText string
+	}{
+		{
+			name:    "Valid relay address",
+			args:    args{relayAddrStr: validAddr},
+			want:    &peer.AddrInfo{ID: validPeerID, Addrs: []multiaddr.Multiaddr{}}, // empty addr
+			wantErr: false,
+		},
+		{
+			name:      "Invalid relay address",
+			args:      args{relayAddrStr: invalidAddr},
+			want:      nil,
+			wantErr:   true,
+			errorText: "fail to parse relay peer info",
+		},
+		{
+			name:      "Empty relay address",
+			args:      args{relayAddrStr: ""},
+			want:      nil,
+			wantErr:   true,
+			errorText: "bad relay address",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseRelayAddress(tt.args.relayAddrStr)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseRelayAddress() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && err != nil && !strings.Contains(err.Error(), tt.errorText) {
+				t.Errorf("ParseRelayAddress() error = %v, expected to contain %v", err, tt.errorText)
+			}
+			if !tt.wantErr && got != nil && got.ID != tt.want.ID {
+				t.Errorf("ParseRelayAddress() got ID = %v, want ID = %v", got.ID, tt.want.ID)
 			}
 		})
 	}
