@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 
+	// tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
+	noise "github.com/libp2p/go-libp2p/p2p/security/noise"
+
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/config"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -143,6 +146,17 @@ func createHost(ctx context.Context, relayOpt libp2p.Option, listenPort int) hos
 		libp2p.EnableAutoNATv2(),
 		libp2p.EnableHolePunching(),
 		libp2p.ForceReachabilityPublic(),
+		libp2p.Security(noise.ID, noise.New),
+		// libp2p.Security(
+		// 	noise.ID,
+		// 	func(id protocol.ID, privkey crypto.PrivKey, muxers []tptu.StreamMuxer) (*noise.SessionTransport, error) {
+		// 		tp, err := noise.New(id, privkey, muxers)
+		// 		if err != nil {
+		// 			return nil, err
+		// 		}
+		// 		return tp.WithSessionOptions(noise.Prologue(prologue))
+		// 	},
+		// ),
 		libp2p.ResourceManager(rcmgr),
 	)
 	if err != nil {
