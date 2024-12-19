@@ -361,45 +361,50 @@ func TestParseBootstrap(t *testing.T) {
 		})
 	}
 }
-
 func TestParseRelayAddress(t *testing.T) {
-	validAddr := "/ip4/127.0.0.1/tcp/1234/p2p/QmRelayID"
+	validPeerIDStr := "12D3KooWRnBKUEkAEpsoCoEiuhxKBJ5j2Bdop6PGxFMvd4PwoevM"
+	validAddr := "/ip4/127.0.0.1/tcp/1234/p2p/" + validPeerIDStr
 	invalidAddr := "/invalid/multiaddr"
 
-	validPeerID, err := peer.Decode("QmRelayID")
+	validPeerID, err := peer.Decode(validPeerIDStr)
 	if err != nil {
 		t.Fatalf("Failed to decode valid peer ID: %v", err)
+	}
+
+	expectedAddr, err := multiaddr.NewMultiaddr("/ip4/127.0.0.1/tcp/1234")
+	if err != nil {
+		t.Fatalf("Failed to create expected multiaddr: %v", err)
 	}
 
 	type args struct {
 		relayAddrStr string
 	}
 	tests := []struct {
-		name      string
-		args      args
-		want      *peer.AddrInfo
-		wantErr   bool
-		errorText string
+		name    string
+		args    args
+		want    *peer.AddrInfo
+		wantErr bool
+		errText string
 	}{
 		{
 			name:    "Valid relay address",
 			args:    args{relayAddrStr: validAddr},
-			want:    &peer.AddrInfo{ID: validPeerID, Addrs: []multiaddr.Multiaddr{}}, // empty addr
+			want:    &peer.AddrInfo{ID: validPeerID, Addrs: []multiaddr.Multiaddr{expectedAddr}},
 			wantErr: false,
 		},
 		{
-			name:      "Invalid relay address",
-			args:      args{relayAddrStr: invalidAddr},
-			want:      nil,
-			wantErr:   true,
-			errorText: "fail to parse relay peer info",
+			name:    "Invalid relay address",
+			args:    args{relayAddrStr: invalidAddr},
+			want:    nil,
+			wantErr: true,
+			errText: "bad relay address",
 		},
 		{
-			name:      "Empty relay address",
-			args:      args{relayAddrStr: ""},
-			want:      nil,
-			wantErr:   true,
-			errorText: "bad relay address",
+			name:    "Empty relay address",
+			args:    args{relayAddrStr: ""},
+			want:    nil,
+			wantErr: true,
+			errText: "bad relay address",
 		},
 	}
 
@@ -410,8 +415,8 @@ func TestParseRelayAddress(t *testing.T) {
 				t.Errorf("ParseRelayAddress() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if tt.wantErr && err != nil && !strings.Contains(err.Error(), tt.errorText) {
-				t.Errorf("ParseRelayAddress() error = %v, expected to contain %v", err, tt.errorText)
+			if tt.wantErr && err != nil && !strings.Contains(err.Error(), tt.errText) {
+				t.Errorf("ParseRelayAddress() error = %v, expected to contain %v", err, tt.errText)
 			}
 			if !tt.wantErr && got != nil && got.ID != tt.want.ID {
 				t.Errorf("ParseRelayAddress() got ID = %v, want ID = %v", got.ID, tt.want.ID)
@@ -419,7 +424,6 @@ func TestParseRelayAddress(t *testing.T) {
 		})
 	}
 }
-
 func TestAssembleRelay(t *testing.T) {
 	relayPeerID, err := peer.Decode("12D3KooWRnBKUEkAEpsoCoEiuhxKBJ5j2Bdop6PGxFMvd4PwoevM")
 	if err != nil {
