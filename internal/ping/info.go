@@ -1,4 +1,3 @@
-// info.go
 package customprotocol
 
 import (
@@ -28,16 +27,15 @@ func (h *InfoRequestHandler) Handle(s network.Stream, from peer.ID, data []byte)
 		from, req.HostId)
 
 	log.Infof("Our addrs %s", h.protocol.host.Addrs())
-	publicIP := "192.0.2.1"
-	privateIP := "10.0.0.1"
+	publicIP := "0.0.0.0"
+	privateIP := "192.0.2.1"
 	isPublic := false
 	systemConfig := map[string]string{
-		"os":     "linux",
+		"os":     "macOS",
 		"arch":   "amd64",
-		"uptime": "72h",
+		"uptime": "null",
 	}
 
-	// Create InfoResponse
 	resp := &p2p.InfoResponse{
 		HostId:        h.protocol.host.ID().String(),
 		PublicIp:      publicIP,
@@ -47,7 +45,6 @@ func (h *InfoRequestHandler) Handle(s network.Stream, from peer.ID, data []byte)
 		SystemConfig:  systemConfig,
 	}
 
-	// Send InfoResponse
 	ok := h.protocol.sendProtoMessage(s.Conn().RemotePeer(), infoResponse, resp)
 
 	if ok {
@@ -62,12 +59,10 @@ func (h *InfoRequestHandler) Handle(s network.Stream, from peer.ID, data []byte)
 	return nil
 }
 
-// InfoResponseHandler handles InfoResponse messages.
 type InfoResponseHandler struct {
 	protocol *PingProtocol
 }
 
-// Handle processes the InfoResponse.
 func (h *InfoResponseHandler) Handle(s network.Stream, from peer.ID, data []byte) error {
 	var resp p2p.InfoResponse
 	if err := proto.Unmarshal(data, &resp); err != nil {

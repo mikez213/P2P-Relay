@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 
+	// tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
+	noise "github.com/libp2p/go-libp2p/p2p/security/noise"
+
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/config"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -84,7 +87,7 @@ func RelayIdentity(keyIndex int) (libp2p.Option, error) {
 func initializeLogger() {
 
 	// logging.SetAllLoggers(logging.LevelWarn)
-	logging.SetAllLoggers(logging.LevelDebug)
+	logging.SetAllLoggers(logging.LevelInfo)
 
 	// logging.SetLogLevel("dht", "error") // get rid of  network size estimator track peers: expected bucket size number of peers
 
@@ -143,6 +146,17 @@ func createHost(ctx context.Context, relayOpt libp2p.Option, listenPort int) hos
 		libp2p.EnableAutoNATv2(),
 		libp2p.EnableHolePunching(),
 		libp2p.ForceReachabilityPublic(),
+		libp2p.Security(noise.ID, noise.New),
+		// libp2p.Security(
+		// 	noise.ID,
+		// 	func(id protocol.ID, privkey crypto.PrivKey, muxers []tptu.StreamMuxer) (*noise.SessionTransport, error) {
+		// 		tp, err := noise.New(id, privkey, muxers)
+		// 		if err != nil {
+		// 			return nil, err
+		// 		}
+		// 		return tp.WithSessionOptions(noise.Prologue(prologue))
+		// 	},
+		// ),
 		libp2p.ResourceManager(rcmgr),
 	)
 	if err != nil {
@@ -230,7 +244,7 @@ func connectToBootstrapPeers(ctx context.Context, host host.Host, bootstrapPeers
 func setupDHTRefresh(kademliaDHT *dht.IpfsDHT) {
 	go func() {
 		for {
-			time.Sleep(30 * time.Second)
+			time.Sleep(60 * time.Second)
 			kademliaDHT.RefreshRoutingTable()
 			peers := kademliaDHT.RoutingTable().ListPeers()
 			log.Infof("Routing table peers (%d): %v", len(peers), peers)
@@ -296,14 +310,17 @@ func main() {
 	identify.ActivationThresh = 1
 
 	cmn.ParseCmdArgs()
-	relayAddrStr, keyIndexInt, bootstrapAddrs := cmn.ParseCmdArgs()
+	relayAddrStr, keyIndexInt, bootstrapAddrs, err := cmn.ParseCmdArgs()
 	log.Infof("%v, %v, %v ", relayAddrStr, keyIndexInt, bootstrapAddrs)
 	listenPort := 1240
 	// listenPort, bootstrapPeers, keyIndex, noderunnerIDStr := parseCommandLineArgs()
 	log.Infof("%v %v %v %v", listenPort, bootstrapAddrs, keyIndexInt)
 
-	nodeOpt := cmn.GetLibp2pIdentity(keyIndexInt)
+	nodeOpt, err := cmn.GetLibp2pIdentity(keyIndexInt)
 
+	if err != nil {
+		log.Errorf("error in startup %v", err)
+	}
 	ctx := context.Background()
 
 	host := createHost(ctx, nodeOpt, listenPort)
@@ -317,7 +334,7 @@ func main() {
 
 	bootstrapDHT(ctx, kademliaDHT)
 
-	bootstrapPeers := cmn.ParseBootstrap(bootstrapAddrs)
+	bootstrapPeers, err := cmn.ParseBootstrap(bootstrapAddrs)
 	if len(bootstrapPeers) == 0 {
 		log.Fatal("no valid bootstrap addrs")
 	}

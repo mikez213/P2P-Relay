@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -43,11 +44,11 @@ var RelayerPrivateKeys = []string{
 
 	//nodes
 	"CAESQFffsVM3eUXLozmXkBM2FSSVhEmo/Cq5RlXOAAaniTdCu3EQ6Zf7lQDasCj6IXyTihFQWZB+nmGFn/ZAA5y5egk=",
-	//12D3KooWNS4QQxwNURwoYoXmGjH9AQkagcGTjRUQT33P4i4FKQsi
+	// 12D3KooWNS4QQxwNURwoYoXmGjH9AQkagcGTjRUQT33P4i4FKQsi
 	"CAESQCSHrfyzNZkxwoNmXI1wx5Lvr6o4+kGxGepFH0AfYlKthyON+1hQRjLJQaBAQLrr1cfMHFFoC40X62DQIhL246U=",
-	//12D3KooWJuteouY1d5SYFcAUAYDVPjFD8MUBgqsdjZfBkAecCS2Y
+	// 12D3KooWJuteouY1d5SYFcAUAYDVPjFD8MUBgqsdjZfBkAecCS2Y
 	"CAESQDyiSqC9Jez8wKSQs74YJalAegamjVKHbnaN35pfe6Gk21WVgCzfvBdLVoRj8XXny/k1LtSOhPZWNz0rWKCOYpk=",
-	//12D3KooWQaZ9Ppi8A2hcEspJhewfPqKjtXu4vx7FQPaUGnHXWpNL
+	// 12D3KooWQaZ9Ppi8A2hcEspJhewfPqKjtXu4vx7FQPaUGnHXWpNL
 }
 
 func RelayIdentity(keyIndex int) (libp2p.Option, error) {
@@ -69,30 +70,13 @@ func RelayIdentity(keyIndex int) (libp2p.Option, error) {
 	return libp2p.Identity(privKey), nil
 }
 
-// func init() {
-// 	bootstrapIDStrs := []string{
-// 		"12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n",
-// 		"12D3KooWBnext3VBZZuBwGn3YahAZjf49oqYckfx64VpzH6dyU1p",
-// 		"12D3KooWDKYjXDDgSGzhEYWYtDvfP9pMtGNY1vnAwRsSp2CwCWHL",
-// 	}
-
-// 	for _, idStr := range bootstrapIDStrs {
-// 		pid, err := peer.Decode(idStr)
-// 		if err != nil {
-// 			log.Fatalf("failed to decode bootstrap pid '%s': %v", idStr, err)
-// 		}
-// 		BootstrapPeerIDs = append(BootstrapPeerIDs, pid)
-// 	}
-
-// }
-
-func GetLibp2pIdentity(keyIndex int) libp2p.Option {
+func GetLibp2pIdentity(keyIndex int) (libp2p.Option, error) {
 	nodeOpt, err := RelayIdentity(keyIndex)
 	if err != nil {
-		log.Fatalf("relay identity error: %v", err)
+		return nil, fmt.Errorf("relay identity error: %w", err)
 	}
-	log.Debug("identity is %+v", nodeOpt)
-	return nodeOpt
+	log.Debugf("identity is %+v", nodeOpt)
+	return nodeOpt, nil
 }
 
 func IsBootstrapPeer(peerID peer.ID) bool {
@@ -117,8 +101,10 @@ func IsInvalidTarget(relayAddresses []peer.AddrInfo, pid peer.ID) bool {
 	return (IsBootstrapPeer(pid) || ContainsPeer(relayAddresses, pid))
 }
 
-func ParseBootstrap(bootstrapAddrs []string) []peer.AddrInfo {
+func ParseBootstrap(bootstrapAddrs []string) ([]peer.AddrInfo, error) {
 	var bootstrapPeers []peer.AddrInfo
+	var parseErrors []string
+
 	for _, addrStr := range bootstrapAddrs {
 		addrStr = strings.TrimSpace(addrStr)
 		if addrStr == "" {
@@ -126,23 +112,33 @@ func ParseBootstrap(bootstrapAddrs []string) []peer.AddrInfo {
 		}
 		maddr, err := multiaddr.NewMultiaddr(addrStr)
 		if err != nil {
-			log.Errorf("invalid bootstrap addr '%s': %v", addrStr, err)
+			errMsg := fmt.Sprintf("invalid bootstrap addr '%s': %v", addrStr, err)
+			log.Error(errMsg)
+			parseErrors = append(parseErrors, errMsg)
 			continue
 		}
 		peerInfo, err := peer.AddrInfoFromP2pAddr(maddr)
 		if err != nil {
-			log.Errorf("failed to parse bootstrap peer info from '%s': %v", addrStr, err)
+			errMsg := fmt.Sprintf("failed to parse bootstrap peer info from '%s': %v", addrStr, err)
+			log.Error(errMsg)
+			parseErrors = append(parseErrors, errMsg)
 			continue
 		}
 		bootstrapPeers = append(bootstrapPeers, *peerInfo)
 	}
 
-	return bootstrapPeers
+	if len(parseErrors) > 0 {
+		return bootstrapPeers, fmt.Errorf("encountered errors while parsing bootstrap addresses: %v", parseErrors)
+	}
+
+	return bootstrapPeers, nil
 }
 
-func ParseCmdArgs() (string, int, []string) {
+func ParseCmdArgs() (string, int, []string, error) {
 	if len(os.Args) < 3 {
-		log.Fatal("need a bootstrap node and relay")
+		errMsg := "need a bootstrap node and relay"
+		log.Error(errMsg)
+		return "", 0, nil, errors.New(errMsg)
 	}
 
 	relayAddrStr := os.Args[1]
@@ -151,44 +147,49 @@ func ParseCmdArgs() (string, int, []string) {
 
 	keyIndexInt, err := strconv.Atoi(keyIndexStr)
 	if err != nil {
-		log.Fatalf("index error: %v", err)
+		errMsg := fmt.Sprintf("index error: %v", err)
+		log.Error(errMsg)
+		return "", 0, nil, errors.New(errMsg)
 	}
 
-	return relayAddrStr, keyIndexInt, bootstrapAddrs
+	return relayAddrStr, keyIndexInt, bootstrapAddrs, nil
 }
 
-func ParseRelayAddress(relayAddrStr string) *peer.AddrInfo {
+func ParseRelayAddress(relayAddrStr string) (*peer.AddrInfo, error) {
 	relayMaddr, err := multiaddr.NewMultiaddr(relayAddrStr)
 	if err != nil {
-		log.Fatalf("bad relay address '%s': %v", relayAddrStr, err)
+		errMsg := fmt.Sprintf("bad relay address '%s': %v", relayAddrStr, err)
+		log.Error(errMsg)
+		return nil, fmt.Errorf(errMsg)
 	}
 
 	relayInfo, err := peer.AddrInfoFromP2pAddr(relayMaddr)
 	if err != nil {
-		log.Fatalf("fail to parse relay peer info from '%s': %v", relayAddrStr, err)
+		errMsg := fmt.Sprintf("fail to parse relay peer info from '%s': %v", relayAddrStr, err)
+		log.Error(errMsg)
+		return nil, fmt.Errorf(errMsg)
 	}
 
-	log.Info("relay info: ", relayInfo.ID, " address", relayInfo.Addrs)
+	log.Infof("relay info: %s, address: %v", relayInfo.ID, relayInfo.Addrs)
 
-	return relayInfo
+	return relayInfo, nil
 }
 
 func AssembleRelay(relayAddrInfo peer.AddrInfo, p peer.AddrInfo) (peer.AddrInfo, error) {
-
 	if len(relayAddrInfo.Addrs) == 0 {
-		err := fmt.Sprintf("relay %s has no addresses!!!!", relayAddrInfo.ID)
-		log.Error(err)
-		return peer.AddrInfo{}, fmt.Errorf(err)
+		errMsg := fmt.Sprintf("relay %s has no addresses!!!!", relayAddrInfo.ID)
+		log.Error(errMsg)
+		return peer.AddrInfo{}, fmt.Errorf(errMsg)
 	}
 
 	relayAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/p2p-circuit/p2p/%s", p.ID))
-	// relayAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/p2p-circuit/p2p/%s", relayAddrInfo.ID))
 	if err != nil {
-		log.Errorf("failed to create relay circuit multiaddr: %v", err)
+		errMsg := fmt.Sprintf("failed to create relay circuit multiaddr: %v", err)
+		log.Error(errMsg)
+		return peer.AddrInfo{}, fmt.Errorf(errMsg)
 	}
 
 	combinedRelayAddr := relayAddrInfo.Addrs[0].Encapsulate(relayAddr)
-
 	p.Addrs = append(p.Addrs, combinedRelayAddr)
 
 	log.Infof("trying to connect to peer %s via relay %s", p.ID, relayAddrInfo.ID)
@@ -196,13 +197,17 @@ func AssembleRelay(relayAddrInfo peer.AddrInfo, p peer.AddrInfo) (peer.AddrInfo,
 
 	targetInfo, err := peer.AddrInfoFromP2pAddr(combinedRelayAddr)
 	if err != nil {
-		log.Error(err)
+		errMsg := fmt.Sprintf("failed to create peer.AddrInfo from combined relay address '%s': %v", combinedRelayAddr, err)
+		log.Error(errMsg)
+		return peer.AddrInfo{}, fmt.Errorf(errMsg)
 	}
 	targetID := targetInfo.ID
 
 	newRelayAddr, err := multiaddr.NewMultiaddr("/p2p/" + relayAddrInfo.ID.String() + "/p2p-circuit/p2p/" + targetID.String())
 	if err != nil {
-		log.Error(err)
+		errMsg := fmt.Sprintf("failed to create new relay multiaddr: %v", err)
+		log.Error(errMsg)
+		return peer.AddrInfo{}, fmt.Errorf(errMsg)
 	}
 
 	log.Infof("newRelayAddr: %v", newRelayAddr)
@@ -212,48 +217,81 @@ func AssembleRelay(relayAddrInfo peer.AddrInfo, p peer.AddrInfo) (peer.AddrInfo,
 		Addrs: []multiaddr.Multiaddr{newRelayAddr},
 	}
 
-	log.Infof("targetRelayedInfo %v", targetRelayedInfo)
+	log.Infof("targetRelayedInfo: %v", targetRelayedInfo)
 
-	return targetRelayedInfo, err
+	return targetRelayedInfo, nil
 }
 
-func ConnectToBootstrapPeers(ctx context.Context, host host.Host, bootstrapPeers []peer.AddrInfo) {
+func ConnectToBootstrapPeers(ctx context.Context, host host.Host, bootstrapPeers []peer.AddrInfo) (bool, []error) {
+	var success bool
+	var errs []error
+
 	for _, peerInfo := range bootstrapPeers {
 		log.Infof("connecting to bootstrap node %s", peerInfo.ID)
 		if err := host.Connect(ctx, peerInfo); err != nil {
-			log.Errorf("Failed to connect to bootstrap node %s: %v", peerInfo.ID, err)
+			errMsg := fmt.Sprintf("Failed to connect to bootstrap node %s: %v", peerInfo.ID, err)
+			log.Error(errMsg)
+			errs = append(errs, fmt.Errorf("bootstrap node %s: %w", peerInfo.ID, err))
 			continue
+		} else {
+			log.Infof("connected to bootstrap node %s", peerInfo.ID)
+			success = true
 		}
-		log.Infof("connected to bootstrap node %s", peerInfo.ID)
 	}
+
+	if !success {
+		errMsg := "failed to connect to any bootstrap nodes"
+		log.Error(errMsg)
+		errs = append(errs, errors.New(errMsg))
+	}
+
+	return success, errs
 }
 
-func BootstrapDHT(ctx context.Context, kademliaDHT *dht.IpfsDHT) {
+func BootstrapDHT(ctx context.Context, kademliaDHT *dht.IpfsDHT) error {
 	if kademliaDHT == nil {
-		log.Fatal("dht not init properly")
+		errMsg := "DHT not initialized properly"
+		log.Error(errMsg)
+		return errors.New(errMsg)
 	}
 
 	if err := kademliaDHT.Bootstrap(ctx); err != nil {
-		log.Fatalf("failed to bootstrap dht: %v", err)
+		errMsg := fmt.Sprintf("failed to bootstrap DHT: %v", err)
+		log.Error(errMsg)
+		return fmt.Errorf("DHT bootstrap error: %w", err)
 	}
+
+	log.Info("DHT bootstrapped successfully")
+	return nil
 }
 
-func ConnectToRelay(ctx context.Context, host host.Host, relayInfo *peer.AddrInfo) {
+func ConnectToRelay(ctx context.Context, host host.Host, relayInfo *peer.AddrInfo) error {
+	if relayInfo == nil {
+		errMsg := "relayInfo is nil"
+		log.Error(errMsg)
+		return errors.New(errMsg)
+	}
+
 	log.Infof("connecting to relay node %s", relayInfo.ID)
 	if err := host.Connect(ctx, *relayInfo); err != nil {
-		log.Fatalf("failed to connect to relay node %s: %v", relayInfo.ID, err)
+		errMsg := fmt.Sprintf("failed to connect to relay node %s: %v", relayInfo.ID, err)
+		log.Error(errMsg)
+		return fmt.Errorf("relay node %s connection error: %w", relayInfo.ID, err)
 	}
 	log.Infof("connected to relay node %s", relayInfo.ID)
+	return nil
 }
 
-func ConstructRelayAddresses(host host.Host, relayInfo *peer.AddrInfo) []peer.AddrInfo {
-
+func ConstructRelayAddresses(host host.Host, relayInfo *peer.AddrInfo) ([]peer.AddrInfo, error) {
 	var relayAddresses []peer.AddrInfo
+	var constructionErrors []string
 
 	for _, addr := range relayInfo.Addrs {
 		fullRelayAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/p2p-circuit/p2p/%s", relayInfo.ID))
 		if err != nil {
-			log.Errorf("failed to create relay circuit multiaddr: %v", err)
+			errMsg := fmt.Sprintf("failed to create relay circuit multiaddr: %v", err)
+			log.Error(errMsg)
+			constructionErrors = append(constructionErrors, errMsg)
 			continue
 		}
 		log.Infof("created relay circuit multiaddr: %s", fullRelayAddr)
@@ -269,21 +307,34 @@ func ConstructRelayAddresses(host host.Host, relayInfo *peer.AddrInfo) []peer.Ad
 		relayAddresses = append(relayAddresses, relayAddrInfo)
 	}
 
-	log.Infof("we are hopefully listening on following relay addresses:")
+	if len(constructionErrors) > 0 {
+		return relayAddresses, fmt.Errorf("errors occurred while constructing relay addresses: %v", constructionErrors)
+	}
+
+	log.Infof("we are hopefully listening on the following relay addresses:")
 	for _, addrInfo := range relayAddresses {
 		for _, addr := range addrInfo.Addrs {
-			fmt.Printf("%s/p2p/%s\n", addr, host.ID())
+			log.Infof("%s/p2p/%s", addr, host.ID())
 		}
 	}
 
-	return relayAddresses
+	return relayAddresses, nil
 }
 
-func ReserveRelay(ctx context.Context, host host.Host, relayInfo *peer.AddrInfo) {
-	_, err := client.Reserve(ctx, host, *relayInfo)
-	if err != nil {
-		log.Errorf("failed to receive a relay reservation from relay %v", err)
-		return
+func ReserveRelay(ctx context.Context, host host.Host, relayInfo *peer.AddrInfo) error {
+	if relayInfo == nil {
+		errMsg := "relayInfo is nil"
+		log.Error(errMsg)
+		return errors.New(errMsg)
 	}
-	log.Infof("relay reservation successful")
+
+	cli, err := client.Reserve(ctx, host, *relayInfo)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to receive a relay reservation from relay: %v", err)
+		log.Error(errMsg)
+		return fmt.Errorf("relay reservation error: %w", err)
+	}
+	log.Infof("Relay reservation details: %+v", cli)
+	log.Info("relay reservation successful")
+	return nil
 }

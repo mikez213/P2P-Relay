@@ -10,6 +10,7 @@ import (
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/config"
 	"github.com/libp2p/go-libp2p/core/host"
+	noise "github.com/libp2p/go-libp2p/p2p/security/noise"
 
 	logging "github.com/ipfs/go-log/v2"
 	libp2p "github.com/libp2p/go-libp2p"
@@ -49,10 +50,10 @@ func init() {
 		}
 		cmn.BootstrapPeerIDs = append(cmn.BootstrapPeerIDs, pid)
 	}
-	logging.SetAllLoggers(logging.LevelDebug)
+	// logging.SetAllLoggers(logging.LevelDebug)
 
-	// logging.SetAllLoggers(logging.LevelWarn)
-	// logging.SetLogLevel("dht", "error") // get rid of  network size estimator track peers: expected bucket size number of peers
+	logging.SetAllLoggers(logging.LevelInfo)
+	logging.SetLogLevel("dht", "error") // get rid of  network size estimator track peers: expected bucket size number of peers
 	logging.SetLogLevel("node_runner_log", "debug")
 }
 
@@ -60,18 +61,6 @@ func pingPeer(ctx context.Context, host host.Host, pid peer.ID, rend string, con
 	log.Infof("attempting to open ping stream to %s", pid)
 
 	pingprotocol.Ping(pid)
-
-	// // Send Ping
-	// node.PingProtocol.Ping(pid)
-	// Wait for Ping Response
-	// select {
-	// case <-done:
-	// 	log.Infof("Ping exchange completed")
-	// 	log.Infof("%v", done)
-	// case <-time.After(5 * time.Second):
-	// 	log.Errorf("Ping exchange timed out")
-	// 	log.Errorf("%v", done)
-	// }
 
 	stream, err := host.NewStream(ctx, pid, protocol.ID(rend))
 	if err != nil {
@@ -218,6 +207,7 @@ func createHost(ctx context.Context, nodeOpt libp2p.Option, relayInfo *peer.Addr
 		libp2p.ForceReachabilityPrivate(),
 		libp2p.EnableNATService(),
 		libp2p.EnableHolePunching(),
+		libp2p.Security(noise.ID, noise.New),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
 			kademliaDHT, _ = dht.New(ctx, h, dht.Mode(dht.ModeClient))
 			return kademliaDHT, nil
@@ -248,14 +238,18 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	relayAddrStr, keyIndexInt, bootstrapAddrs := cmn.ParseCmdArgs()
+	relayAddrStr, keyIndexInt, bootstrapAddrs, err := cmn.ParseCmdArgs()
 	log.Infof("%v %v %v", relayAddrStr, bootstrapAddrs, keyIndexInt)
 
-	nodeOpt := cmn.GetLibp2pIdentity(keyIndexInt)
+	nodeOpt, err := cmn.GetLibp2pIdentity(keyIndexInt)
 
-	relayInfo := cmn.ParseRelayAddress(relayAddrStr)
+	relayInfo, err := cmn.ParseRelayAddress(relayAddrStr)
 
-	bootstrapPeers := cmn.ParseBootstrap(bootstrapAddrs)
+	bootstrapPeers, err := cmn.ParseBootstrap(bootstrapAddrs)
+
+	if err != nil {
+		log.Error("error in startup %v", err)
+	}
 	if len(bootstrapPeers) == 0 {
 		log.Fatal("no valid bootstrap addrs")
 	}
@@ -280,7 +274,7 @@ func main() {
 	cmn.ConnectToBootstrapPeers(ctx, host, bootstrapPeers)
 	cmn.BootstrapDHT(ctx, kademliaDHT)
 	cmn.ConnectToRelay(ctx, host, relayInfo)
-	relayAddresses := cmn.ConstructRelayAddresses(host, relayInfo)
+	relayAddresses, err := cmn.ConstructRelayAddresses(host, relayInfo)
 
 	log.Infof("waiting 10 sec for stability")
 	time.Sleep(5 * time.Second)
@@ -294,14 +288,14 @@ func main() {
 
 	announceSelf(ctx, kademliaDHT, rend)
 
-	projectID := "project_test_1234"
-	devID := "dev_1234"
-	apiKey := "api_1234"
-	issueNeed := "issue_1234"
+	// projectID := "project_test_1234"
+	// devID := "dev_1234"
+	// apiKey := "api_1234"
+	// issueNeed := "issue_1234"
 	hostID := "host_1234"
-	configOptions := map[string]string{"val1": "key1", "val2": "key2"}
+	// configOptions := map[string]string{"val1": "key1", "val2": "key2"}
 
-	ticker := time.NewTicker(7 * time.Second)
+	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
 
 	go func() {
@@ -318,30 +312,30 @@ func main() {
 
 					continue
 				}
-				// log.Info("WOULD PING HERE BUT CANCELED @@@@@")
+				log.Info("WOULD PING HERE BUT CANCELED @@@@@")
 				// go pingPeer(ctx, host, peerID, rend, connectedPeers, pingprotocol)
-				log.Infof("protocol actions for: %s", peerID)
+				// log.Infof("protocol actions for: %s", peerID)
 
-				log.Infof("mass sending protocols to %s", peerID)
-				if host.Network().Connectedness(peerID) != network.Connected {
-					log.Errorf("Peer %s is not fully connected, level is %s", peerID, host.Network().Connectedness(peerID))
-					// continue
-				}
-				pingprotocol.Ping(peerID)
-				pingprotocol.Status(peerID, projectID, devID, apiKey)
+				// log.Infof("mass sending protocols to %s", peerID)
+				// if host.Network().Connectedness(peerID) != network.Connected {
+				// 	log.Errorf("Peer %s is not fully connected, level is %s", peerID, host.Network().Connectedness(peerID))
+				// 	// continue
+				// }
+				// pingprotocol.Ping(peerID)
+				// pingprotocol.Status(peerID, projectID, devID, apiKey)
 				pingprotocol.Info(peerID, hostID)
-				pingprotocol.StartStream(peerID, projectID, devID, apiKey, issueNeed, configOptions)
-				time.Sleep(1 * time.Second)
-				pingprotocol.Status(peerID, projectID, devID, apiKey)
-				pingprotocol.StopStream(peerID, projectID, devID, apiKey)
+				// pingprotocol.StartStream(peerID, projectID, devID, apiKey, issueNeed, configOptions)
+				// time.Sleep(5 * time.Second)
+				// pingprotocol.Status(peerID, projectID, devID, apiKey)
+				// pingprotocol.StopStream(peerID, projectID, devID, apiKey)
 
-				select {
-				case <-done:
-					log.Infof(" exchange completed")
+				// select {
+				// case <-done:
+				// 	log.Infof(" exchange completed")
 
-				case <-time.After(5 * time.Second):
-					log.Errorf(" exchange timed out")
-				}
+				// case <-time.After(5 * time.Second):
+				// 	log.Errorf(" exchange timed out")
+				// }
 			}
 		}
 	}()

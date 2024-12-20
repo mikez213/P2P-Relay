@@ -1,4 +1,3 @@
-// stopstream.go
 package customprotocol
 
 import (
@@ -33,7 +32,7 @@ func (h *StopStreamRequestHandler) Handle(s network.Stream, from peer.ID, data [
 		log.Info("WE WERE NOT STREAMING")
 		statusMessage = "NOT_STREAMING_PREVIOUSLY" //replace str with proto value
 	} else {
-		log.Warn("STOPPED ACTIVE STREAM")
+		log.Info("STOPPED ACTIVE STREAM")
 		isStreaming = false
 		statusMessage = "STREAM_STOPPED"
 	}
