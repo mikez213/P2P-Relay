@@ -21,8 +21,11 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 	libp2p "github.com/libp2p/go-libp2p"
 
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
+
+	cmn "mnwarm/internal/shared"
 
 	multiaddr "github.com/multiformats/go-multiaddr"
 )
@@ -125,16 +128,22 @@ func createHost(ctx context.Context, relayOpt libp2p.Option, listenPort int) hos
 		return cfg.Apply(libp2p.ListenAddrs(listenAddrs...))
 	}
 
+	rcmgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(rcmgr.InfiniteLimits))
+	if err != nil {
+		log.Fatalf("could not create new resource manager: %w", err)
+	}
+
 	host, err := libp2p.New(
 		relayOpt,
 		ListenAddrs,
 		libp2p.EnableRelay(),
-		libp2p.EnableRelayService(),
+		libp2p.EnableRelayService(relay.WithInfiniteLimits()), // do a config with limited istead?
 		libp2p.NATPortMap(),
 		libp2p.EnableNATService(),
 		libp2p.EnableAutoNATv2(),
 		libp2p.EnableHolePunching(),
 		libp2p.ForceReachabilityPublic(),
+		libp2p.ResourceManager(rcmgr),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -142,7 +151,7 @@ func createHost(ctx context.Context, relayOpt libp2p.Option, listenPort int) hos
 	return host
 }
 
-func setupRelayService(host host.Host) *relay.Relay {
+func setupRelayService(host host.Host) (*relay.Relay, relay.MetricsTracer) {
 	mt := relay.NewMetricsTracer()
 	log.Debugf("Relay timeouts: %d %d %d",
 		relay.ConnectTimeout,
@@ -157,9 +166,9 @@ func setupRelayService(host host.Host) *relay.Relay {
 	// var status pb.Status
 	if err != nil {
 		log.Fatalf("Failed to instantiate the relay: %v", err)
-		return nil
+		return nil, nil
 	}
-	return relayService
+	return relayService, mt
 }
 
 func logHostInfo(host host.Host) {
@@ -235,81 +244,6 @@ func setupDHTRefresh(kademliaDHT *dht.IpfsDHT) {
 	}()
 }
 
-// func handleNodeRunnerIDRequest(stream network.Stream, nodeRunnerID peer.ID) {
-// 	defer stream.Close()
-// 	log.Infof("Received Node Runner ID request from %s", stream.Conn().RemotePeer())
-
-// 	// Read the request message
-// 	buf := make([]byte, 256)
-// 	n, err := stream.Read(buf)
-// 	if err != nil {
-// 		if err != io.EOF {
-// 			log.Errorf("Error reading request: %v", err)
-// 		}
-// 		return
-// 	}
-
-// 	request := strings.TrimSpace(string(buf[:n]))
-// 	log.Infof("got request: %s", request)
-// 	if request != "PING" {
-// 		log.Warnf("Invalid request from %s: %s", stream.Conn().RemotePeer(), request)
-// 		return
-// 	}
-
-// 	// Respond with the Node Runner's Peer ID
-// 	response := fmt.Sprintf("%s\n", nodeRunnerID.String())
-// 	_, err = stream.Write([]byte(response))
-// 	if err != nil {
-// 		log.Errorf("Error writing response to %s: %v", stream.Conn().RemotePeer(), err)
-// 		return
-// 	}
-
-// 	log.Infof("Sent Node Runner Peer ID %s to %s", nodeRunnerID, stream.Conn().RemotePeer())
-// }
-
-// func requestNodeRunnerID(ctx context.Context, host host.Host, relayInfo *peer.AddrInfo) (peer.ID, error) {
-// 	stream, err := host.NewStream(ctx, relayInfo.ID, NodeRunnerProtocol)
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to open stream to relay: %w", err)
-// 	}
-// 	defer stream.Close()
-
-// 	_, err = fmt.Fprintf(stream, "REQUEST_NODE_RUNNER_ID\n")
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to send request: %w", err)
-// 	}
-
-// 	buf := make([]byte, 128)
-// 	n, err := stream.Read(buf)
-// 	if err != nil && err != io.EOF {
-// 		return "", fmt.Errorf("failed to read response: %w", err)
-// 	}
-
-// 	nodeRunnerIDStr := strings.TrimSpace(string(buf[:n]))
-// 	nodeRunnerID, err := peer.Decode(nodeRunnerIDStr)
-// 	if err != nil {
-// 		return "", fmt.Errorf("invalid Peer ID received: %w", err)
-// 	}
-
-// 	log.Infof("Received Node Runner Peer ID: %s", nodeRunnerID)
-// 	return nodeRunnerID, nil
-// }
-
-// func communicateWithNodeRunner(ctx context.Context, host host.Host, nodeRunnerID peer.ID, protocolID string) {
-// 	stream, err := host.NewStream(ctx, nodeRunnerID, protocol.ID(protocolID))
-// 	if err != nil {
-// 		log.Fatalf("Failed to open stream to Node Runner: %v", err)
-// 	}
-// 	defer stream.Close()
-
-//		log.Info("Receiving message from Node Runner")
-//		buf := make([]byte, 1024)
-//		n, err := stream.Read(buf)
-//		if err != nil && err != io.EOF {
-//			log.Errorf("Error reading from stream: %v", err)
-//		}
-//		log.Infof("Received message: %s", string(buf[:n]))
-//	}
 func handleStream(stream network.Stream) {
 	log.Infof("%s: Received stream status request from %s. Node guid: %s", stream.Conn().LocalPeer(), stream.Conn().RemotePeer())
 	log.Error("NEW STREAM!!!!!")
@@ -361,33 +295,35 @@ func main() {
 	initializeLogger()
 	identify.ActivationThresh = 1
 
-	listenPort, bootstrapPeers, keyIndex, noderunnerIDStr := parseCommandLineArgs()
+	cmn.ParseCmdArgs()
+	relayAddrStr, keyIndexInt, bootstrapAddrs := cmn.ParseCmdArgs()
+	log.Infof("%v, %v, %v ", relayAddrStr, keyIndexInt, bootstrapAddrs)
+	listenPort := 1240
+	// listenPort, bootstrapPeers, keyIndex, noderunnerIDStr := parseCommandLineArgs()
+	log.Infof("%v %v %v %v", listenPort, bootstrapAddrs, keyIndexInt)
 
-	if noderunnerIDStr == "" {
-		log.Fatal("Node Runner Peer ID must be provided using the -noderunner flag")
-	}
-
-	// nodeRunnerID, err := peer.Decode(noderunnerIDStr)
-	// if err != nil {
-	// 	log.Fatalf("Invalid Node Runner Peer ID '%s': %v", noderunnerIDStr, err)
-	// }
-
-	relayOpt := getRelayIdentity(keyIndex)
+	nodeOpt := cmn.GetLibp2pIdentity(keyIndexInt)
 
 	ctx := context.Background()
 
-	host := createHost(ctx, relayOpt, listenPort)
+	host := createHost(ctx, nodeOpt, listenPort)
 
-	relayService := setupRelayService(host)
+	relayService, metrics := setupRelayService(host)
 
-	log.Info(relayService)
+	log.Info(relayService, metrics)
 	logHostInfo(host)
 
 	kademliaDHT := createDHT(ctx, host)
 
 	bootstrapDHT(ctx, kademliaDHT)
 
-	connectToBootstrapPeers(ctx, host, bootstrapPeers)
+	bootstrapPeers := cmn.ParseBootstrap(bootstrapAddrs)
+	if len(bootstrapPeers) == 0 {
+		log.Fatal("no valid bootstrap addrs")
+	}
+
+	cmn.ConnectToBootstrapPeers(ctx, host, bootstrapPeers)
+	// connectToBootstrapPeers(ctx, host, bootstrapPeers)
 
 	time.Sleep(5 * time.Second)
 

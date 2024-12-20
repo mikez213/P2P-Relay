@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -35,9 +34,8 @@ import (
 
 var log = logging.Logger("node_runner_log")
 
-var bootstrapPeerIDs = []peer.ID{}
-
 func init() {
+	log.Info(cmn.Shearing)
 	bootstrapIDStrs := []string{
 		"12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n",
 		"12D3KooWBnext3VBZZuBwGn3YahAZjf49oqYckfx64VpzH6dyU1p",
@@ -49,11 +47,11 @@ func init() {
 		if err != nil {
 			log.Fatalf("failed to decode bootstrap pid '%s': %v", idStr, err)
 		}
-		bootstrapPeerIDs = append(bootstrapPeerIDs, pid)
+		cmn.BootstrapPeerIDs = append(cmn.BootstrapPeerIDs, pid)
 	}
-	// logging.SetAllLoggers(logging.LevelDebug)
+	logging.SetAllLoggers(logging.LevelDebug)
 
-	logging.SetAllLoggers(logging.LevelWarn)
+	// logging.SetAllLoggers(logging.LevelWarn)
 	// logging.SetLogLevel("dht", "error") // get rid of  network size estimator track peers: expected bucket size number of peers
 	logging.SetLogLevel("node_runner_log", "debug")
 }
@@ -174,38 +172,6 @@ func handleStream(stream network.Stream) {
 	}
 }
 
-func isBootstrapPeer(peerID peer.ID) bool {
-	for _, bootstrapID := range bootstrapPeerIDs {
-		if peerID == bootstrapID {
-			return true
-		}
-	}
-	return false
-}
-
-func parseBootstrap(bootstrapAddrs []string) []peer.AddrInfo {
-	var bootstrapPeers []peer.AddrInfo
-	for _, addrStr := range bootstrapAddrs {
-		addrStr = strings.TrimSpace(addrStr)
-		if addrStr == "" {
-			continue
-		}
-		maddr, err := multiaddr.NewMultiaddr(addrStr)
-		if err != nil {
-			log.Errorf("invalid bootstrap addr '%s': %v", addrStr, err)
-			continue
-		}
-		peerInfo, err := peer.AddrInfoFromP2pAddr(maddr)
-		if err != nil {
-			log.Errorf("failed to parse bootstrap peer info from '%s': %v", addrStr, err)
-			continue
-		}
-		bootstrapPeers = append(bootstrapPeers, *peerInfo)
-	}
-
-	return bootstrapPeers
-}
-
 func createHost(ctx context.Context, nodeOpt libp2p.Option, relayInfo *peer.AddrInfo) (host.Host, *dht.IpfsDHT) {
 	mt := autorelay.NewMetricsTracer()
 	var kademliaDHT *dht.IpfsDHT
@@ -214,6 +180,8 @@ func createHost(ctx context.Context, nodeOpt libp2p.Option, relayInfo *peer.Addr
 		addrs := []string{
 			"/ip4/0.0.0.0/tcp/0",
 			"/ip6/::/tcp/0",
+			"/ip4/0.0.0.0/udp/0/quic", // enable QUIC
+			"/ip6/::/udp/0/quic",
 		}
 		listenAddrs := make([]multiaddr.Multiaddr, 0, len(addrs))
 
@@ -247,7 +215,7 @@ func createHost(ctx context.Context, nodeOpt libp2p.Option, relayInfo *peer.Addr
 		libp2p.EnableAutoRelayWithStaticRelays([]peer.AddrInfo{*relayInfo}, autorelay.WithMetricsTracer(mt)),
 		libp2p.NATPortMap(),
 		libp2p.EnableAutoNATv2(),
-		// libp2p.ForceReachabilityPrivate(),
+		libp2p.ForceReachabilityPrivate(),
 		libp2p.EnableNATService(),
 		libp2p.EnableHolePunching(),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
@@ -277,23 +245,31 @@ func announceSelf(ctx context.Context, kademliaDHT *dht.IpfsDHT, rend string) {
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	relayAddrStr, keyIndexInt, bootstrapAddrs := cmn.ParseCmdArgs()
-
-	// cmn.RelayIdentity(1)
+	log.Infof("%v %v %v", relayAddrStr, bootstrapAddrs, keyIndexInt)
 
 	nodeOpt := cmn.GetLibp2pIdentity(keyIndexInt)
 
 	relayInfo := cmn.ParseRelayAddress(relayAddrStr)
 
-	bootstrapPeers := parseBootstrap(bootstrapAddrs)
+	bootstrapPeers := cmn.ParseBootstrap(bootstrapAddrs)
 	if len(bootstrapPeers) == 0 {
 		log.Fatal("no valid bootstrap addrs")
 	}
 
 	host, kademliaDHT := createHost(ctx, nodeOpt, relayInfo)
+
+	host.Network().Notify(&network.NotifyBundle{
+		ConnectedF: func(n network.Network, conn network.Conn) {
+			log.Infof("network We have Connected to %s", conn.RemotePeer())
+		},
+		DisconnectedF: func(n network.Network, conn network.Conn) {
+			log.Warnf("network We have Disconnected to %s", conn.RemotePeer())
+		},
+	})
 
 	rend := "/customprotocol/1.0.0"
 	// rend := "/ipfs/id/1.0.0"
@@ -337,14 +313,20 @@ func main() {
 			}
 
 			for _, peerID := range peers {
+				// if peerID == host.ID() || isBootstrapPeer(peerID) || containsPeer(relayAddresses, peerID) {
 				if peerID == host.ID() || cmn.IsInvalidTarget(relayAddresses, peerID) {
+
 					continue
 				}
 				// log.Info("WOULD PING HERE BUT CANCELED @@@@@")
 				// go pingPeer(ctx, host, peerID, rend, connectedPeers, pingprotocol)
 				log.Infof("protocol actions for: %s", peerID)
 
-				log.Info("mass sending protocols to %s", peerID)
+				log.Infof("mass sending protocols to %s", peerID)
+				if host.Network().Connectedness(peerID) != network.Connected {
+					log.Errorf("Peer %s is not fully connected, level is %s", peerID, host.Network().Connectedness(peerID))
+					// continue
+				}
 				pingprotocol.Ping(peerID)
 				pingprotocol.Status(peerID, projectID, devID, apiKey)
 				pingprotocol.Info(peerID, hostID)

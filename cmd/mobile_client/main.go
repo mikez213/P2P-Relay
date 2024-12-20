@@ -17,6 +17,7 @@ import (
 	routing "github.com/libp2p/go-libp2p/core/routing"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
+	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 
@@ -56,8 +57,11 @@ var rend = "/customprotocol/1.0.0"
 // 	//12D3KooWEDso33ti9KsKmD2g2egNmw6BXgch7V5vFz1TziuNYybo
 
 // 	//nodes
+// 	"CAESQFffsVM3eUXLozmXkBM2FSSVhEmo/Cq5RlXOAAaniTdCu3EQ6Zf7lQDasCj6IXyTihFQWZB+nmGFn/ZAA5y5egk=",
 // 	//12D3KooWNS4QQxwNURwoYoXmGjH9AQkagcGTjRUQT33P4i4FKQsi
+// 	"CAESQCSHrfyzNZkxwoNmXI1wx5Lvr6o4+kGxGepFH0AfYlKthyON+1hQRjLJQaBAQLrr1cfMHFFoC40X62DQIhL246U=",
 // 	//12D3KooWJuteouY1d5SYFcAUAYDVPjFD8MUBgqsdjZfBkAecCS2Y
+// 	"CAESQDyiSqC9Jez8wKSQs74YJalAegamjVKHbnaN35pfe6Gk21WVgCzfvBdLVoRj8XXny/k1LtSOhPZWNz0rWKCOYpk=",
 // 	//12D3KooWQaZ9Ppi8A2hcEspJhewfPqKjtXu4vx7FQPaUGnHXWpNL
 // }
 
@@ -76,7 +80,7 @@ func init() {
 		cmn.BootstrapPeerIDs = append(cmn.BootstrapPeerIDs, pid)
 	}
 
-	logging.SetAllLoggers(logging.LevelWarn)
+	// logging.SetAllLoggers(logging.LevelWarn)
 	logging.SetAllLoggers(logging.LevelDebug)
 
 	// logging.SetLogLevel("dht", "error") // get rid of  network size estimator track peers: expected bucket size number of peers
@@ -85,6 +89,7 @@ func init() {
 
 func pingPeer(ctx context.Context, host host.Host, pid peer.ID, rend string, connectedPeers map[peer.ID]peer.AddrInfo) {
 	log.Infof("attempting to open ping stream to %s", pid)
+	log.Info(cmn.Shearing)
 	// done := make(chan bool)
 	// node := ping.NewNode(host, done)
 	// done := ping.Ping(ctx, host, pid)
@@ -105,7 +110,7 @@ func pingPeer(ctx context.Context, host host.Host, pid peer.ID, rend string, con
 		log.Errorf("failed to open ping stream to %s: %v", pid, err)
 		return
 	}
-	log.Infof("special stream to %s opened successfully", pid)
+	log.Infof("ping stream to %s opened successfully", pid)
 
 	defer stream.Close()
 
@@ -199,6 +204,8 @@ func createHost(ctx context.Context, nodeOpt libp2p.Option, relayInfo *peer.Addr
 		addrs := []string{
 			"/ip4/0.0.0.0/tcp/0",
 			"/ip6/::/tcp/0",
+			"/ip4/0.0.0.0/udp/0/quic", // enable QUIC
+			"/ip6/::/udp/0/quic",
 		}
 		listenAddrs := make([]multiaddr.Multiaddr, 0, len(addrs))
 
@@ -233,7 +240,8 @@ func createHost(ctx context.Context, nodeOpt libp2p.Option, relayInfo *peer.Addr
 		libp2p.EnableAutoRelayWithStaticRelays([]peer.AddrInfo{*relayInfo}, autorelay.WithMetricsTracer(mt)),
 		libp2p.NATPortMap(),
 		libp2p.EnableAutoNATv2(),
-		// libp2p.ForceReachabilityPrivate(),
+		// libp2p.EnableAutoNATService(),
+		libp2p.ForceReachabilityPrivate(),
 		libp2p.EnableNATService(),
 		libp2p.EnableHolePunching(),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
@@ -351,7 +359,7 @@ func connectToPeers(ctx context.Context, host host.Host, relayAddresses []peer.A
 
 func manualStream(ctx context.Context, host host.Host, p peer.AddrInfo, relayAddrInfo peer.AddrInfo) {
 	for i := 0; i < 5; i++ {
-
+		log.Infof("THIS IS MANUAL TEST STREAM")
 		stream, err := host.NewStream(ctx, p.ID, protocol.ID(rend))
 		log.Infof("attempting to open stream to peer %s with ID %s", p.ID, protocol.ID(rend))
 
@@ -383,8 +391,35 @@ func manualStream(ctx context.Context, host host.Host, p peer.AddrInfo, relayAdd
 
 }
 
-func info_dump(host *host.Host) {
-	log.Info()
+func Addresses(host host.Host) []string {
+
+	addrs := host.Addrs()
+	out := make([]string, 0, len(addrs))
+
+	hostID := host.ID()
+
+	for _, addr := range addrs {
+		addr := fmt.Sprintf("%s/p2p/%s", addr.String(), hostID.String())
+		out = append(out, addr)
+	}
+
+	return out
+}
+
+func hostGetAddrInfo(host *host.Host) *peer.AddrInfo {
+
+	addresses := Addresses(*host)
+
+	addr := addresses[0]
+
+	maddr, err := multiaddr.NewMultiaddr(addr)
+
+	info, err := peer.AddrInfoFromP2pAddr(maddr)
+
+	if err != nil {
+		log.Error(err)
+	}
+	return info
 }
 
 func announceSelf(ctx context.Context, kademliaDHT *dht.IpfsDHT, rend string) {
@@ -399,6 +434,7 @@ func main() {
 	defer cancel()
 
 	relayAddrStr, keyIndexInt, bootstrapAddrs := cmn.ParseCmdArgs()
+	log.Infof("%v %v %v	", relayAddrStr, bootstrapAddrs, keyIndexInt)
 
 	nodeOpt := cmn.GetLibp2pIdentity(keyIndexInt)
 
@@ -425,11 +461,20 @@ func main() {
 
 	host, kademliaDHT := createHost(ctx, nodeOpt, relayInfo)
 
+	host.Network().Notify(&network.NotifyBundle{
+		ConnectedF: func(n network.Network, conn network.Conn) {
+			log.Infof("network We have Connected to %s", conn.RemotePeer())
+		},
+		DisconnectedF: func(n network.Network, conn network.Conn) {
+			log.Warnf("network We have Disconnected to %s", conn.RemotePeer())
+		},
+	})
+
 	// rend := "/ping"
 	// rend := "/ipfs/id/1.0.0"
-	// identify.ActivationThresh = 1
+	identify.ActivationThresh = 1
 	// rend := identify.ID
-	// host.SetStreamHandler(protocol.ID(rend), handleStream)
+	host.SetStreamHandler(protocol.ID(rend), handleStream)
 	// rend := "/ipfs/ping/1.0.0"
 	// rend := ping.ID
 
@@ -481,7 +526,7 @@ func main() {
 				continue
 			}
 
-			log.Infof("current hostGetAddrInfo: %+v", cmn.HostGetAddrInfo(&host))
+			log.Infof("current hostGetAddrInfo: %+v", hostGetAddrInfo(&host))
 
 			for _, peerID := range peers {
 				if peerID == host.ID() || cmn.IsInvalidTarget(relayAddresses, peerID) {
@@ -489,7 +534,11 @@ func main() {
 				}
 				log.Infof("Pinging peer: %s", peerID)
 				// go func(pid peer.ID) {
-				log.Info("mass sending protocols to %s", peerID)
+				log.Infof("mass sending protocols to %s", peerID)
+				// if host.Network().Connectedness(peerID) != network.Connected {
+				log.Infof("Connected level of %s is %+v", peerID, host.Network().Connectedness(peerID))
+				// continue
+				// }
 				pingprotocol.Ping(peerID)
 				pingprotocol.Status(peerID, projectID, devID, apiKey)
 				pingprotocol.Info(peerID, hostID)

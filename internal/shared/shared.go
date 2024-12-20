@@ -176,7 +176,9 @@ func ParseRelayAddress(relayAddrStr string) *peer.AddrInfo {
 func AssembleRelay(relayAddrInfo peer.AddrInfo, p peer.AddrInfo) (peer.AddrInfo, error) {
 
 	if len(relayAddrInfo.Addrs) == 0 {
-		log.Errorf("relay %s has no addresses!!!!", relayAddrInfo.ID)
+		err := fmt.Sprintf("relay %s has no addresses!!!!", relayAddrInfo.ID)
+		log.Error(err)
+		return peer.AddrInfo{}, fmt.Errorf(err)
 	}
 
 	relayAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/p2p-circuit/p2p/%s", p.ID))
@@ -284,35 +286,4 @@ func ReserveRelay(ctx context.Context, host host.Host, relayInfo *peer.AddrInfo)
 		return
 	}
 	log.Infof("relay reservation successful")
-}
-
-func Addresses(host host.Host) []string {
-
-	addrs := host.Addrs()
-	out := make([]string, 0, len(addrs))
-
-	hostID := host.ID()
-
-	for _, addr := range addrs {
-		addr := fmt.Sprintf("%s/p2p/%s", addr.String(), hostID.String())
-		out = append(out, addr)
-	}
-
-	return out
-}
-
-func HostGetAddrInfo(host *host.Host) *peer.AddrInfo {
-
-	addresses := Addresses(*host)
-
-	addr := addresses[0]
-
-	maddr, err := multiaddr.NewMultiaddr(addr)
-
-	info, err := peer.AddrInfoFromP2pAddr(maddr)
-
-	if err != nil {
-		log.Error(err)
-	}
-	return info
 }

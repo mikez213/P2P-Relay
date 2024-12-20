@@ -3,27 +3,35 @@ services:
     image: bootstrap_server:latest
     container_name: bootstrap1
     build:
-      context: ./boot
-      dockerfile: Dockerfile
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        SERVICE: boot
+    environment:
+      - SERVICE=boot
     network_mode: host  # Use host network
     command: [
-      "./bootstrap_server",
-      "-port=1237",
-      "-key=0"
+      # "./boot",
+      "1237",
+      "0",
     ]
 
   bootstrap2:
     image: bootstrap_server:latest
     container_name: bootstrap2
     build:
-      context: ./boot
-      dockerfile: Dockerfile
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        SERVICE: boot
+    environment:
+      - SERVICE=boot
     network_mode: host  # Use host network
     command: [
-      "./bootstrap_server",
-      "-port=1238",
-      "-key=1",
-      "-bootstrap=/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n"
+      # "./boot",
+      "1238",
+      "1",
+      "/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n"
     ]
     depends_on:
       - bootstrap1
@@ -32,14 +40,19 @@ services:
     image: bootstrap_server:latest
     container_name: bootstrap3
     build:
-      context: ./boot
-      dockerfile: Dockerfile
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        SERVICE: boot
+    environment:
+      - SERVICE=boot
     network_mode: host  # Use host network
     command: [
-      "./bootstrap_server",
-      "-port=1239",
-      "-key=2",
-      "-bootstrap=/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n,/ip4/192.168.65.3/tcp/1238/p2p/12D3KooWBnext3VBZZuBwGn3YahAZjf49oqYckfx64VpzH6dyU1p"
+      # "./boot",
+      "1239",
+      "2",
+      "/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n",
+      "/ip4/192.168.65.3/tcp/1238/p2p/12D3KooWBnext3VBZZuBwGn3YahAZjf49oqYckfx64VpzH6dyU1p",
     ]
     depends_on:
       - bootstrap1
@@ -49,59 +62,43 @@ services:
     image: relay_node:latest
     container_name: relay
     build:
-      context: ./relay
-      dockerfile: Dockerfile
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        SERVICE: relay
+    environment:
+      - SERVICE=relay
     network_mode: host
     command: [
-      "./relay_node",
-      "-port=1240",
-      "-key=3",
-      "-bootstrap=/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n,/ip4/192.168.65.3/tcp/1238/p2p/12D3KooWBnext3VBZZuBwGn3YahAZjf49oqYckfx64VpzH6dyU1p,/ip4/192.168.65.3/tcp/1239/p2p/12D3KooWDKYjXDDgSGzhEYWYtDvfP9pMtGNY1vnAwRsSp2CwCWHL",
-      "-noderunner=12D3KooWNS4QQxwNURwoYoXmGjH9AQkagcGTjRUQT33P4i4FKQsi"
-
+      # "./relay",
+      "some",
+      "3",
+      "/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n",
+      "/ip4/192.168.65.3/tcp/1238/p2p/12D3KooWBnext3VBZZuBwGn3YahAZjf49oqYckfx64VpzH6dyU1p",
+      "/ip4/192.168.65.3/tcp/1239/p2p/12D3KooWDKYjXDDgSGzhEYWYtDvfP9pMtGNY1vnAwRsSp2CwCWHL"
     ]
     depends_on:
       - bootstrap1
       - bootstrap2
       - bootstrap3
 
-  # chat1:
-  #   image: chat_client:latest
-  #   container_name: chat1
-  #   build:
-  #     context: ./chat
-  #     dockerfile: Dockerfile
-  #   depends_on:
-  #     - bootstrap1
-  #     - bootstrap2
-  #     - bootstrap3
-  #     - relay
-  #   network_mode: host
-  #   command: [
-  #     "./chat_client",
-  #     "/ip4/192.168.65.3/tcp/1240/p2p/12D3KooWRnBKUEkAEpsoCoEiuhxKBJ5j2Bdop6PGxFMvd4PwoevM",
-  #     "6",
-  #     "/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n",
-  #     "/ip4/192.168.65.3/tcp/1238/p2p/12D3KooWBnext3VBZZuBwGn3YahAZjf49oqYckfx64VpzH6dyU1p",
-  #     "/ip4/192.168.65.3/tcp/1239/p2p/12D3KooWDKYjXDDgSGzhEYWYtDvfP9pMtGNY1vnAwRsSp2CwCWHL"
-  #   ]
-  #   # networks:
-  #   #   chat1-net:
-  #   #     ipv4_address: 172.19.0.2
-
   node_runner:
     image: node_runner:latest
     container_name: node_runner
     build:
-      context: .
-      dockerfile: node_runner/Dockerfile
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        SERVICE: node_runner
+    environment:
+      - SERVICE=node_runner
     depends_on:
       - bootstrap1
       - bootstrap2
       - bootstrap3
       - relay
     command: [
-      "./node_runner",
+      # "./node_runner",
       "/ip4/192.168.65.3/tcp/1240/p2p/12D3KooWRnBKUEkAEpsoCoEiuhxKBJ5j2Bdop6PGxFMvd4PwoevM",
       "7",
       "/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n",
@@ -109,16 +106,19 @@ services:
       "/ip4/192.168.65.3/tcp/1239/p2p/12D3KooWDKYjXDDgSGzhEYWYtDvfP9pMtGNY1vnAwRsSp2CwCWHL"
     ]
     networks:
-      chat2-net:
+      noderunner-net:
         ipv4_address: 172.20.0.2
-
 
   mobile_client:
     image: mobile_client:latest
     container_name: mobile_client
     build:
-      context: .
-      dockerfile: mobile_client/Dockerfile
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        SERVICE: mobile_client
+    environment:
+      - SERVICE=mobile_client
     depends_on:
       - bootstrap1
       - bootstrap2
@@ -126,7 +126,7 @@ services:
       - relay
       - node_runner
     command: [
-      "./mobile_client",
+      # "./mobile_client",
       "/ip4/192.168.65.3/tcp/1240/p2p/12D3KooWRnBKUEkAEpsoCoEiuhxKBJ5j2Bdop6PGxFMvd4PwoevM",
       "8",
       "/ip4/192.168.65.3/tcp/1237/p2p/12D3KooWLr1gYejUTeriAsSu6roR2aQ423G3Q4fFTqzqSwTsMz9n",
@@ -134,23 +134,17 @@ services:
       "/ip4/192.168.65.3/tcp/1239/p2p/12D3KooWDKYjXDDgSGzhEYWYtDvfP9pMtGNY1vnAwRsSp2CwCWHL"
     ]
     networks:
-      chat3-net:
+      mobile-net:
         ipv4_address: 172.21.0.2
-        
-networks:
-  chat1-net:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.19.0.0/16
 
-  chat2-net:
+networks:
+  noderunner-net:
     driver: bridge
     ipam:
       config:
         - subnet: 172.20.0.0/16
 
-  chat3-net:
+  mobile-net:
     driver: bridge
     ipam:
       config:
